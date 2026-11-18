@@ -1,0 +1,46 @@
+{
+  "retrieved": "2026-11-17",
+  "license": "项目方确认已获本项目非商业网页公开分发授权。模型来源见下表，本记录不向第三方授予再利用许可。",
+  "models": [
+    {
+      "file": "male.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/1-%E7%94%B7%E6%80%A7-%E4%BD%8E%E6%A8%A1.glb",
+      "sha256": "37753af2502861dc91ce38b893276e27e425ee367e56f22e2e27e84a90523dec"
+    },
+    {
+      "file": "female.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/2%20%E5%A5%B3%E6%80%A7-%E4%BD%8E%E6%A8%A1.glb",
+      "sha256": "6409cc9bcfe0fa2087c79965399c7f5e5de4e875a84e0c7d77b2e87203423a18"
+    },
+    {
+      "file": "muscular.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/03%2B%E5%81%A5%E7%A1%95.glb",
+      "sha256": "b10bf1a4073810068e4527edf649c6a5ad050c0abb6e25d96fc1d49b624fcfe5"
+    },
+    {
+      "file": "slim.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/04%2B%E7%BA%A4%E7%BB%86.glb",
+      "sha256": "9c91e26976353fd1a09c1c2d13ab28ac9baa71e201973bcf12e2b775b699a835"
+    },
+    {
+      "file": "broad.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/05%2B%E5%AE%BD%E5%8E%9A.glb",
+      "sha256": "92f445cc9b983cecdcf0aedf85837753597a8183189b8f0a96c3aa2655dec094"
+    },
+    {
+      "file": "teen.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/07%2B%E5%B0%91%E5%B9%B4.glb",
+      "sha256": "98e8813b3dfd01f66bbb84e76a462e4c154c5d5d897b064eaa63e0cbce82ce9b"
+    },
+    {
+      "file": "child.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/06%2B%E5%84%BF%E7%AB%A5.glb",
+      "sha256": "0c7cc54817ab42e26f9f80f0aa64091ea3805cdb6f6bf9c5b9ae5c2634c0ee73"
+    },
+    {
+      "file": "chibi.glb",
+      "source": "https://www.liblib.tv/assets/3d-characters/08-%E4%BA%8C%E5%A4%B4%E8%BA%AB.glb",
+      "sha256": "6d71502f00dd39a825070a7fcff9ec7d41a4d7e58fb645e09e8545a46a9220e4"
+    }
+  ]
+}

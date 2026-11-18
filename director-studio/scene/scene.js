@@ -1,4 +1,5 @@
-import { makeCast } from './cast.js';
+import { clone as cloneSkeleton } from '../../vendor/three/SkeletonUtils.js';
+import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import * as T from '../../vendor/three/three.module.js';
 export { T };
 export { OrbitControls } from '../../vendor/three/OrbitControls.js';
@@ -65,18 +66,22 @@ export const bodyTypes={male:'标准男性',female:'标准女性',muscular:'健�
 export const poseNames={stand:'站立',tpose:'T型',walk:'行走',run:'跑步',sit:'坐姿',squat:'蹲下',kneel:'单膝跪',knees:'双膝跪',hips:'叉腰',lean:'倚靠',bow:'鞠躬',think:'思考',fight:'格斗',kick:'踢球',throw:'投掷',push:'推进',raise:'招手',reach:'伸手',cross:'抱臂',phone:'看手机',lie:'躺下'};
 const boneNames={body:'Waist',head:'Head',leftArm:'L_Upperarm',rightArm:'R_Upperarm',leftElbow:'L_Forearm',rightElbow:'R_Forearm',leftLeg:'L_Thigh',rightLeg:'R_Thigh',leftKnee:'L_Calf',rightKnee:'R_Calf',leftWrist:'L_Hand',rightWrist:'R_Hand',leftAnkle:'L_Foot',rightAnkle:'R_Foot'};
 
+const loader = new GLTFLoader(), modelCache = new Map();
 export function buildActor(color,bodyType='male') {
   const root=new T.Group(),head=new T.Bone();head.position.y=1.6;root.add(head);
   const visual={root,joints:{head},loaded:false};
   visual.color=color; visual.bodyType=bodyType;
   for(const child of visual.root.children)child.visible=false;
-  visual.ready=Promise.resolve().then(()=>{
-    const model=makeCast(bodyType,color);
+  if (!modelCache.has(bodyType)) modelCache.set(bodyType,loader.loadAsync(new URL('../models/'+bodyType+'.glb',import.meta.url).href));
+  visual.ready=modelCache.get(bodyType).then(gltf=>{
+    const model=cloneSkeleton(gltf.scene);
+    model.rotation.y=-Math.PI/2;
     model.updateMatrixWorld(true);
     const bounds=new T.Box3().setFromObject(model),size=bounds.getSize(new T.Vector3());
     const height=({teen:1.5,child:1.15,chibi:.95})[bodyType]||1.75;
     visual.height=height;model.scale.setScalar(height/size.y);
     model.position.set(-(bounds.max.x+bounds.min.x)/2*model.scale.x,-bounds.min.y*model.scale.y,-(bounds.max.z+bounds.min.z)/2*model.scale.z);
+    model.traverse(node=>{if(node.isMesh){node.material=new T.MeshStandardMaterial({color,roughness:.56,metalness:0});node.castShadow=node.receiveShadow=true;node.frustumCulled=false;}});
     visual.root.clear();visual.root.add(model);visual.model=model;
     visual.joints={};visual.rest={};
     model.traverse(node=>{if(node.isBone)visual.rest[node.name]=node.quaternion.clone();});
@@ -89,7 +94,7 @@ export function buildActor(color,bodyType='male') {
     visual.pelvis=model.getObjectByName('Hip');visual.hipY=visual.pelvis.position.clone();
     visual.endpoints={leftHand:model.getObjectByName('L_Hand'),rightHand:model.getObjectByName('R_Hand'),leftFoot:model.getObjectByName('L_Foot'),rightFoot:model.getObjectByName('R_Foot'),leftElbow:model.getObjectByName('L_Forearm'),rightElbow:model.getObjectByName('R_Forearm'),leftKnee:model.getObjectByName('L_Calf'),rightKnee:model.getObjectByName('R_Calf'),head:model.getObjectByName('Head')};
     visual.loaded=true;return visual;
-  }).catch(error=>{visual.error=error.message;return visual;});
+  }).catch(error=>{visual.error=error.message;modelCache.delete(bodyType);return visual;});
   return visual;
 }
 function anglesFor(pose) {

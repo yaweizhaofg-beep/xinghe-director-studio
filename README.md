@@ -10,7 +10,7 @@
 
 | 目录或入口 | 内容 |
 |---|---|
-| director-studio/index.html、studio.js | 编辑器页面和交互入口 |
+| index.html、director-studio/studio.js | 编辑器页面和交互入口 |
 | director-studio/scene/ | 场景、人物骨骼与关节限位、道具、碰撞 |
 | director-studio/timeline/ | 动作、路径和运镜的时间计算 |
 | director-studio/ui/ | 样式与图标 |
@@ -20,6 +20,8 @@
 
 ## Demo 交接
 
-- [公开试玩](https://yaweizhaofg-beep.github.io/xinghe-director-studio/director-studio/)
+- [打开可视化导演台](https://yaweizhaofg-beep.github.io/xinghe-director-studio/)
 - [使用者产品说明（支持打印为 PDF）](https://yaweizhaofg-beep.github.io/xinghe-director-studio/guide/)
 - [开发交接：启动、模块、数据、验收与限制](docs/DEVELOPER.md)
+
+人物来源及授权范围见 [模型清单](director-studio/models/SOURCES.json)。

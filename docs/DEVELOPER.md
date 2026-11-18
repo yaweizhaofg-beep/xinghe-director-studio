@@ -1,6 +1,6 @@
 # 技术交接 · 3D 导演台 Demo
 
-本仓库是交互验证原型。交接基线是公开版的八种程序化人物。运行时不需要账号、服务端、外部模型地址或构建步骤。
+本仓库是交互验证原型。交接基线是与本机一致的八种骨骼 GLB 人物。运行时不需要账号、服务端、外部模型地址或构建步骤。
 
 ## 启动和发布
 
@@ -10,9 +10,9 @@
 
 | 文件 | 职责 |
 |---|---|
-| director-studio/index.html、director-studio/ui/ | DOM 控件、布局、主题和本地图标 |
+| index.html、director-studio/ui/ | DOM 控件、布局、主题和本地图标 |
 | director-studio/studio.js | 交互入口。mount 创建场景对象，updateScene 按时间求姿势与机位，frame 渲染导演和拍摄视角；tracks 绘制轨道，restore 导入工程 |
-| director-studio/scene/scene.js、cast.js | 三维场景、角色骨骼、姿势预设与路径采样；人物按参数生成 |
+| director-studio/scene/scene.js、director-studio/models/ | 三维场景、角色骨骼、姿势预设与路径采样；人物从同站 GLB 加载 |
 | director-studio/timeline/sequence.js | 片段区间与源动作进度映射；分割保留原动作进度 |
 | director-studio/scene/collision.js | 骨骼胶囊、道具包围盒、地面与移动过程检测 |
 | director-studio/scene/props.js、vendor/three/ | 道具与 Three.js 运行库。该目录是公开编辑器的运行依赖 |
@@ -34,4 +34,4 @@
 - 现有动作是从站姿进入预设并还原；复杂连续表演需要姿势关键帧与插值设计。
 - 碰撞是近似体积检测。把极端体型、坐卧、快速跨越障碍作为回归样例，明确可接受误差。
 - 本地数据没有云端备份或多人协作。正式交付前补工程格式版本、迁移、导入失败处理和存储恢复测试。
-- 公共仓库仅维护 cast.js 的人物资源。新增模型须核对网页分发和成片使用范围。保留仓库内 Three.js 与 Lucide 第三方声明。
+- 模型来源及校验值见 director-studio/models/SOURCES.json。新增模型须核对网页分发和成片使用范围。保留仓库内 Three.js 与 Lucide 第三方声明。

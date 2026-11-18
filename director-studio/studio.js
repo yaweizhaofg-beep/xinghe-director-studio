@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
 import { sceneCollision } from './scene/collision.js';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=detail1';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -873,7 +873,7 @@ function initializeEditor(){
   $('s'+axis).onchange=e=>{const item=active();if(item.locked||!Number.isFinite(e.target.valueAsNumber))return;item.scale||=[1,1,1];item.scale[i]=Math.max(.1,e.target.valueAsNumber);select(currentId);save();};
  }
  $('uniform-scale').oninput=e=>{if(active().locked)return;active().scale=Array(3).fill(e.target.valueAsNumber);};$('uniform-scale').onchange=()=>{select(currentId);save();};
- $('actor-color').oninput=e=>{const item=active();if(item.locked)return;item.color=e.target.value;item.visual.root.traverse(n=>{if(n.isMesh&&n.material?.userData.costume)n.material.color.set(item.color);});};$('actor-color').onchange=save;
+ $('actor-color').oninput=e=>{const item=active();if(item.locked)return;item.color=e.target.value;item.visual.root.traverse(n=>{if(n.isMesh&&n.material?.color)n.material.color.set(item.color);});};$('actor-color').onchange=save;
  $('duplicate').onclick=()=>{const old=active();const {visual,tag,...plain}=old;const item=structuredClone(plain);item.id=crypto.randomUUID();item.name+=' 副本';item.pos[0]+=1.3;item.path=item.path.map(p=>[p[0]+1.3,p[1],p[2]]);item.locked=false;data.items.push(item);mount(item);currentId=item.id;lists();save();};
  $('delete').onclick=()=>{
   const item=active();if(item.locked)return;if(item.type==='camera'&&data.items.filter(i=>i.type==='camera').length===1){setStatus('至少保留一个机位。');return;}
