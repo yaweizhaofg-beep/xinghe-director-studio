@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './icons.js?v=20261118-xinghe2';
 import { sceneCollision } from './collision.js?v=20261117-collision5';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointLabels, bodyTypes, poseNames } from './scene.js?v=cast1';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene.js?v=rig-limits1';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -814,7 +814,7 @@ function solveJoint(item,endpointName,target){
    const inv=bone.parent.getWorldQuaternion(new T.Quaternion()).invert();
    const from=endpoint.getWorldPosition(new T.Vector3()).sub(origin).normalize().applyQuaternion(inv);
    const to=target.clone().sub(origin).normalize().applyQuaternion(inv);
-   const delta=new T.Quaternion().setFromUnitVectors(from,to);bone.quaternion.premultiply(delta);bone.updateMatrixWorld(true);
+   const delta=new T.Quaternion().setFromUnitVectors(from,to);bone.quaternion.premultiply(delta);constrainBone(visual,key);bone.updateMatrixWorld(true);
   }
   if(endpoint.getWorldPosition(new T.Vector3()).distanceTo(target)<.005)break;
  }
@@ -828,11 +828,11 @@ function initializeEditor(){
  for(const [key,label] of Object.entries(jointLabels)){
   const group=document.createElement('div');group.className='joint-group';const title=document.createElement('h3');title.textContent=label;group.append(title);
   for(const [axis,text] of ['前后','扭转','侧向'].entries()){
-   if(/Elbow|Knee/.test(key)&&axis>0)continue;
+   const [min,max]=jointRange(key)[axis];if(min===max)continue;
    const row=document.createElement('div');row.className='joint-slider';const name=document.createElement('span');name.textContent=text;
-   const input=document.createElement('input');input.type='range';input.min=-160;input.max=160;input.value=0;input.dataset.joint=key;input.dataset.axis=axis;input.ariaLabel=label+text;
+   const input=document.createElement('input');input.type='range';input.min=min;input.max=max;input.value=0;input.dataset.joint=key;input.dataset.axis=axis;input.ariaLabel=label+text;
    const out=document.createElement('output');out.value='0°';
-   input.oninput=()=>{const item=active();if(item.locked)return;item.jointAxes||={};item.jointAxes[key]||=[0,0,0];item.jointAxes[key][axis]=Number(input.value);item.boneOverrides={};out.value=input.value+'°';};input.onchange=save;
+   input.oninput=()=>{const item=active();if(item.locked)return;item.jointAxes||={};item.jointAxes[key]||=[0,0,0];item.jointAxes[key][axis]=Number(input.value);if(item.boneOverrides)delete item.boneOverrides[key];out.value=input.value+'°';};input.onchange=save;
    row.append(name,input,out);group.append(row);
   }$('joint-controls').append(group);
  }
@@ -852,7 +852,7 @@ function initializeEditor(){
   };
   const dragMove=e=>{
    if(!jointDrag||jointDrag.name!==name||e.pointerId!==jointDrag.pointerId)return;e.stopPropagation();
-   if(name==='head'){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;const a=jointDrag.headAngles;jointDrag.item.jointAxes||={};jointDrag.item.jointAxes.head=[T.MathUtils.clamp(a[0]+(e.clientY-jointDrag.startY)*.6,-70,70),T.MathUtils.clamp(a[1]+(e.clientX-jointDrag.startX)*.6,-85,85),a[2]];if(jointDrag.item.boneOverrides)delete jointDrag.item.boneOverrides.head;return;}
+   if(name==='head'){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;const a=jointDrag.headAngles;jointDrag.item.jointAxes||={};jointDrag.item.jointAxes.head=[T.MathUtils.clamp(a[0]+(e.clientY-jointDrag.startY)*.6,-50,55),T.MathUtils.clamp(a[1]+(e.clientX-jointDrag.startX)*.6,-70,70),a[2]];if(jointDrag.item.boneOverrides)delete jointDrag.item.boneOverrides.head;return;}
    const r=stage.getBoundingClientRect();raycaster.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),sceneCamera);
    const hit=raycaster.ray.intersectPlane(jointDrag.plane,new T.Vector3());if(hit){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;solveJoint(jointDrag.item,jointDrag.name,hit);}
   };

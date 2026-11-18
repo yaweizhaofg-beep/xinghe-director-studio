@@ -39,6 +39,7 @@ export function buildSet() {
 }
 
 export const jointLabels = {
+  leftWrist:'左手腕',rightWrist:'右手腕',leftAnkle:'左脚踝',rightAnkle:'右脚踝',
   body:'上身', head:'头部', leftArm:'左肩', rightArm:'右肩', leftElbow:'左肘', rightElbow:'右肘',
   leftLeg:'左髋', rightLeg:'右髋', leftKnee:'左膝', rightKnee:'右膝',
 };
@@ -62,7 +63,7 @@ export function samplePath(points, progress) {
 
 export const bodyTypes={male:'标准男性',female:'标准女性',muscular:'健硕',slim:'纤细',teen:'少年',child:'儿童',broad:'宽厚',chibi:'二头身'};
 export const poseNames={stand:'站立',tpose:'T型',walk:'行走',run:'跑步',sit:'坐姿',squat:'蹲下',kneel:'单膝跪',knees:'双膝跪',hips:'叉腰',lean:'倚靠',bow:'鞠躬',think:'思考',fight:'格斗',kick:'踢球',throw:'投掷',push:'推进',raise:'招手',reach:'伸手',cross:'抱臂',phone:'看手机',lie:'躺下'};
-const boneNames={body:'Waist',head:'Head',leftArm:'L_Upperarm',rightArm:'R_Upperarm',leftElbow:'L_Forearm',rightElbow:'R_Forearm',leftLeg:'L_Thigh',rightLeg:'R_Thigh',leftKnee:'L_Calf',rightKnee:'R_Calf'};
+const boneNames={body:'Waist',head:'Head',leftArm:'L_Upperarm',rightArm:'R_Upperarm',leftElbow:'L_Forearm',rightElbow:'R_Forearm',leftLeg:'L_Thigh',rightLeg:'R_Thigh',leftKnee:'L_Calf',rightKnee:'R_Calf',leftWrist:'L_Hand',rightWrist:'R_Hand',leftAnkle:'L_Foot',rightAnkle:'R_Foot'};
 
 export function buildActor(color,bodyType='male') {
   const root=new T.Group(),head=new T.Bone();head.position.y=1.6;root.add(head);
@@ -80,6 +81,11 @@ export function buildActor(color,bodyType='male') {
     visual.joints={};visual.rest={};
     model.traverse(node=>{if(node.isBone)visual.rest[node.name]=node.quaternion.clone();});
     for(const [key,name] of Object.entries(boneNames))visual.joints[key]=model.getObjectByName(name);
+    root.updateMatrixWorld(true);
+    visual.bases={};
+    for(const [key,bone] of Object.entries(visual.joints)){
+      visual.bases[key]=bone.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(root.getWorldQuaternion(new T.Quaternion()));
+    }
     visual.pelvis=model.getObjectByName('Hip');visual.hipY=visual.pelvis.position.clone();
     visual.endpoints={leftHand:model.getObjectByName('L_Hand'),rightHand:model.getObjectByName('R_Hand'),leftFoot:model.getObjectByName('L_Foot'),rightFoot:model.getObjectByName('R_Foot'),leftElbow:model.getObjectByName('L_Forearm'),rightElbow:model.getObjectByName('R_Forearm'),leftKnee:model.getObjectByName('L_Calf'),rightKnee:model.getObjectByName('R_Calf'),head:model.getObjectByName('Head')};
     visual.loaded=true;return visual;
@@ -107,6 +113,33 @@ function anglesFor(pose) {
  if(pose==='walk'||pose==='run'){put('leftLeg',-35);put('rightLeg',25);put('rightKnee',45);put('rightArm',-35);put('leftArm',25);}
  return a;
 }
+// Animation guardrails, in the character's neutral anatomical frame.
+export function jointRange(key){
+ const left=key.startsWith('left');
+ if(key.endsWith('Knee'))return [[0,135],[0,0],[0,0]];
+ if(key.endsWith('Elbow'))return [[-140,0],[0,0],[0,0]];
+ if(key.endsWith('Wrist'))return [[-55,55],[0,0],[-22,22]];
+ if(key.endsWith('Ankle'))return [[-25,40],[-8,8],[-16,16]];
+ if(key.endsWith('Arm'))return [[-155,45],[-60,60],left?[-25,145]:[-145,25]];
+ if(key.endsWith('Leg'))return [[-115,25],[-32,32],left?[-20,45]:[-45,20]];
+ if(key==='head')return [[-50,55],[-70,70],[-32,32]];
+ return [[-25,45],[-35,35],[-25,25]];
+}
+function limitedAngles(key,degrees){
+ const bounds=jointRange(key);
+ return degrees.map((v,i)=>T.MathUtils.degToRad(T.MathUtils.clamp(Number.isFinite(v)?v:0,...bounds[i])));
+}
+function applyAngles(v,key,angles){
+ const basis=v.bases[key],bone=v.joints[key];
+ const delta=new T.Quaternion().setFromEuler(new T.Euler(...limitedAngles(key,angles)));
+ bone.quaternion.copy(basis).multiply(delta).multiply(basis.clone().invert()).multiply(v.rest[bone.name]);
+}
+export function constrainBone(v,key){
+ const bone=v.joints[key],basis=v.bases[key];
+ const delta=basis.clone().invert().multiply(bone.quaternion).multiply(v.rest[bone.name].clone().invert()).multiply(basis).normalize();
+ const e=new T.Euler().setFromQuaternion(delta,'XYZ');
+ applyAngles(v,key,[e.x,e.y,e.z].map(T.MathUtils.radToDeg));
+}
 export function renderPose(actor,t,distance) {
  const v=actor.visual;
  if(!v.loaded)return;
@@ -122,12 +155,11 @@ export function renderPose(actor,t,distance) {
  for(const [key,bone] of Object.entries(v.joints)){
   if(!bone)continue;
   const preset=a[key]||[0,0,0],user=actor.jointAxes?.[key]||[actor.joints?.[key]||0,0,0];
-  const q=new T.Quaternion().setFromEuler(new T.Euler(...preset.map((x,i)=>radians(x+user[i]))));
-  const parentQ=bone.parent.getWorldQuaternion(new T.Quaternion());
-  const rootQ=v.root.getWorldQuaternion(new T.Quaternion());
-  const basis=parentQ.clone().invert().multiply(rootQ);
-  bone.quaternion.premultiply(basis.clone().multiply(q).multiply(basis.invert()));
-  if(actor.boneOverrides?.[key])bone.quaternion.fromArray(actor.boneOverrides[key]);
+  applyAngles(v,key,preset.map((x,i)=>x+user[i]));
+  if(actor.boneOverrides?.[key]){
+    bone.quaternion.fromArray(actor.boneOverrides[key]);
+    constrainBone(v,key);
+  }
   bone.updateMatrixWorld(true);
  }
  if(['sit','squat','kneel','knees'].includes(actor.pose))v.root.position.y-=({sit:.42,squat:.62,kneel:.55,knees:.55})[actor.pose]*(scale[1]||1)*v.height/1.75;
