@@ -10,12 +10,12 @@
 
 | 文件 | 职责 |
 |---|---|
-| director-studio/index.html、studio.css、brand.css、icons.js | DOM 控件、布局、主题和本地图标 |
+| director-studio/index.html、director-studio/ui/ | DOM 控件、布局、主题和本地图标 |
 | director-studio/studio.js | 交互入口。mount 创建场景对象，updateScene 按时间求姿势与机位，frame 渲染导演和拍摄视角；tracks 绘制轨道，restore 导入工程 |
-| director-studio/scene.js、cast.js | 三维场景、角色骨骼、姿势预设与路径采样；人物按参数生成 |
-| director-studio/sequence.js | 片段区间与源动作进度映射；分割保留原动作进度 |
-| director-studio/collision.js | 骨骼胶囊、道具包围盒、地面与移动过程检测 |
-| director-demo/props.js、vendor/ | 道具与 Three.js 运行库。该目录是公开编辑器的运行依赖 |
+| director-studio/scene/scene.js、cast.js | 三维场景、角色骨骼、姿势预设与路径采样；人物按参数生成 |
+| director-studio/timeline/sequence.js | 片段区间与源动作进度映射；分割保留原动作进度 |
+| director-studio/scene/collision.js | 骨骼胶囊、道具包围盒、地面与移动过程检测 |
+| director-studio/scene/props.js、vendor/three/ | 道具与 Three.js 运行库。该目录是公开编辑器的运行依赖 |
 
 ## 数据和输出
 

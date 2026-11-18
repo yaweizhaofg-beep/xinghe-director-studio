@@ -1,7 +1,7 @@
-import {clipsFor,routeClips,phase,routePhase,liveClip} from './sequence.js';
-import { icon, icon as assetIcon, iconButton, initializeIcons } from './icons.js?v=20261118-xinghe2';
-import { sceneCollision } from './collision.js?v=20261117-collision5';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene.js?v=rig-limits1';
+import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
+import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
+import { sceneCollision } from './scene/collision.js';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');

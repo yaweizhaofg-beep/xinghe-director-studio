@@ -1,4 +1,4 @@
-import * as T from '../director-demo/vendor/three.module.js';
+import * as T from '../../vendor/three/three.module.js';
 const V=()=>new T.Vector3();
 export function segmentDistance(a,b,c,d){
  const u=b.clone().sub(a),v=d.clone().sub(c),w=a.clone().sub(c),A=u.dot(u),B=u.dot(v),C=v.dot(v),D=u.dot(w),E=v.dot(w);let s=0,t=0;

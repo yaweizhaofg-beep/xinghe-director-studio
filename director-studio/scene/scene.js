@@ -1,9 +1,9 @@
 import { makeCast } from './cast.js';
-import * as T from '../director-demo/vendor/three.module.js';
+import * as T from '../../vendor/three/three.module.js';
 export { T };
-export { OrbitControls } from '../director-demo/vendor/OrbitControls.js';
-export { TransformControls } from '../director-demo/vendor/TransformControls.js';
-export { createProp } from '../director-demo/props.js';
+export { OrbitControls } from '../../vendor/three/OrbitControls.js';
+export { TransformControls } from '../../vendor/three/TransformControls.js';
+export { createProp } from './props.js';
 
 const matte = color => new T.MeshStandardMaterial({ color, roughness: .8 });
 function shape(parent, geometry, material, x, y, z) {

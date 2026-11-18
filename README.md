@@ -6,12 +6,17 @@
 
 运行 `python3 -m http.server 8000`，在桌面浏览器打开 http://localhost:8000/ 。工程保存在当前浏览器，也可保存为 JSON 备份。使用「机位视角」预览录制画面。
 
-## 目录
+## 代码导航
 
-- director-studio：编辑器、时间轴、碰撞检测与独立生成人物的 cast.js。
-- director-demo：编辑器依赖的道具几何和 Three.js 运行库。
-
-Three.js 及 Lucide 图标的第三方声明分别位于 director-demo/vendor/LICENSE-Three.txt 和 director-studio/vendor/LUCIDE-LICENSE.txt。
+| 目录或入口 | 内容 |
+|---|---|
+| director-studio/index.html、studio.js | 编辑器页面和交互入口 |
+| director-studio/scene/ | 场景、人物骨骼与关节限位、道具、碰撞 |
+| director-studio/timeline/ | 动作、路径和运镜的时间计算 |
+| director-studio/ui/ | 样式与图标 |
+| vendor/ | Three.js 运行库和第三方许可 |
+| guide/ | 面向使用者的图文说明 |
+| docs/ | 面向开发者的交接和验收说明 |
 
 ## Demo 交接
 

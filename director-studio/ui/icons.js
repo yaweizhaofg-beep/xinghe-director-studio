@@ -1,4 +1,4 @@
-// Lucide 0.344.0, matching xinghe-web-delivery. License: vendor/LUCIDE-LICENSE.txt
+// Lucide 0.344.0, matching xinghe-web-delivery. License: vendor/lucide/LUCIDE-LICENSE.txt
 const glyphs={
   "scene": "<path d=\"m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z\" />\n  <path d=\"m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65\" />\n  <path d=\"m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65\" />",
   "actor": "<circle cx=\"12\" cy=\"5\" r=\"1\" />\n  <path d=\"m9 20 3-6 3 6\" />\n  <path d=\"m6 8 6 2 6-2\" />\n  <path d=\"M12 10v4\" />",

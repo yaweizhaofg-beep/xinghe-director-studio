@@ -1,4 +1,4 @@
-import * as THREE from './vendor/three.module.js';
+import * as THREE from '../../vendor/three/three.module.js';
 
 export function createProp(kind) {
   const group = new THREE.Group();
