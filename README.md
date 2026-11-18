@@ -12,3 +12,9 @@
 - director-demo：编辑器依赖的道具几何和 Three.js 运行库。
 
 Three.js 及 Lucide 图标的第三方声明分别位于 director-demo/vendor/LICENSE-Three.txt 和 director-studio/vendor/LUCIDE-LICENSE.txt。
+
+## Demo 交接
+
+- [公开试玩](https://yaweizhaofg-beep.github.io/xinghe-director-studio/director-studio/)
+- [使用者产品说明（支持打印为 PDF）](https://yaweizhaofg-beep.github.io/xinghe-director-studio/guide/)
+- [开发交接：启动、模块、数据、验收与限制](docs/DEVELOPER.md)

@@ -882,7 +882,7 @@ function initializeEditor(){
  };
  $('export-project').onclick=()=>{const blob=new Blob([serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='导演台工程.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);setStatus('工程已导出为 JSON，可继续编辑；截图是 PNG，录像是 MP4 / WebM。');};
  $('import-project').onclick=()=>$('project-file').click();$('project-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('工程文件过大');restore(await file.text());save();setStatus('工程已打开。');}catch(error){setStatus('无法打开：'+error.message);}e.target.value='';};
- $('help').onclick=()=>setStatus('选人 → 姿势 → 拖手脚。W移动 / E旋转 / R缩放；F聚焦；⌘Z撤销；右键人物切姿势。录像与截图在左侧参考素材。');
+ $('help').onclick=()=>window.open('../guide/','_blank','noopener');
  stage.addEventListener('contextmenu',e=>{
   e.preventDefault();if(pointerTravel>5||cameraMode||recorder)return;
   const r=stage.getBoundingClientRect();raycaster.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),sceneCamera);
