@@ -91,6 +91,9 @@ export function buildActor(color,bodyType='male') {
     for(const [key,bone] of Object.entries(visual.joints)){
       visual.bases[key]=bone.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(root.getWorldQuaternion(new T.Quaternion()));
     }
+    visual.parts=Object.fromEntries(Object.entries(visual.joints).map(([k,b])=>[k,b.scale.clone()]));
+    visual.neck=['NeckTwist01','NeckTwist02'].map(n=>model.getObjectByName(n)).filter(Boolean);
+    visual.neckBases=visual.neck.map(b=>b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(root.getWorldQuaternion(new T.Quaternion())));
     visual.pelvis=model.getObjectByName('Hip');visual.hipY=visual.pelvis.position.clone();
     visual.endpoints={leftHand:model.getObjectByName('L_Hand'),rightHand:model.getObjectByName('R_Hand'),leftFoot:model.getObjectByName('L_Foot'),rightFoot:model.getObjectByName('R_Foot'),leftElbow:model.getObjectByName('L_Forearm'),rightElbow:model.getObjectByName('R_Forearm'),leftKnee:model.getObjectByName('L_Calf'),rightKnee:model.getObjectByName('R_Calf'),head:model.getObjectByName('Head')};
     visual.loaded=true;return visual;
@@ -102,20 +105,22 @@ function anglesFor(pose) {
  if(pose==='tpose'){put('leftArm',0,0,80);put('rightArm',0,0,-80);}
  if(['sit','squat','kneel','knees'].includes(pose)){
   for(const side of ['left','right']){put(side+'Leg',pose==='squat'?-110:-85);put(side+'Knee',pose==='squat'?135:90);}
+  if(pose==='squat'){put('leftLeg',-86,-12,24);put('rightLeg',-86,12,-24);put('body',15);}
   if(pose==='kneel'){put('rightLeg',15);put('rightKnee',125);}
   if(pose==='knees'){put('leftLeg',0);put('rightLeg',0);put('leftKnee',135);put('rightKnee',135);}
  }
- if(pose==='raise'){put('rightArm',-145,0,20);put('rightElbow',-45);}
+ if(pose==='raise'){put('rightArm',-135,0,-18);put('rightElbow',-45);}
  if(pose==='reach'||pose==='push'){put('rightArm',-85);put('leftArm',-85);}
  if(pose==='bow'){put('body',45);put('head',20);}
  if(pose==='lean'){put('body',0,0,14);put('leftKnee',30);}
- if(pose==='think'||pose==='phone'){put('rightArm',-35,0,-18);put('rightElbow',-110);put('head',20);}
- if(pose==='cross'){put('leftArm',-35,0,28);put('rightArm',-35,0,-28);put('leftElbow',-115,45);put('rightElbow',-115,-45);}
- if(pose==='hips'){put('leftArm',0,0,35);put('rightArm',0,0,-35);put('leftElbow',-70);put('rightElbow',-70);}
+ if(pose==='think'||pose==='phone'){put('rightArm',pose==='think'?-86:-8,55,12);put('rightElbow',pose==='think'?-119:-120);put('head',12);}
+ if(pose==='cross'){put('leftArm',-32,-62,-23);put('rightArm',-48,60,23);put('leftElbow',-106);put('rightElbow',-105);}
+ if(pose==='hips'){put('leftArm',18,0,-15);put('rightArm',18,0,15);put('leftElbow',-88);put('rightElbow',-88);}
  if(pose==='fight'){put('leftArm',-70);put('rightArm',-55);put('leftElbow',-85);put('rightElbow',-105);put('leftLeg',-20);put('rightKnee',30);}
  if(pose==='kick'){put('leftLeg',-75);put('leftKnee',15);put('rightArm',-45);}
  if(pose==='throw'){put('rightArm',-125,0,-35);put('rightElbow',-80);put('body',0,-25);}
  if(pose==='walk'||pose==='run'){put('leftLeg',-35);put('rightLeg',25);put('rightKnee',45);put('rightArm',-35);put('leftArm',25);}
+ if(pose==='run'){put('body',12);put('leftLeg',-60);put('rightKnee',82);put('rightArm',-52);put('rightElbow',-75);put('leftElbow',-70);}
  return a;
 }
 // Animation guardrails, in the character's neutral anatomical frame.
@@ -152,15 +157,37 @@ export function renderPose(actor,t,distance) {
  const rotation=actor.rotation||[0,0,0];v.root.rotation.x=radians(rotation[0]);v.root.rotation.z=radians(rotation[2]);
  v.model.traverse(n=>{if(n.isBone&&v.rest[n.name])n.quaternion.copy(v.rest[n.name]);});
  const a=anglesFor(actor.pose);
- const gait=distance&&t>0&&t<1?Math.sin(t*distance*7)*Math.min(1,10*t,10*(1-t)):0;
+ // Adjust clearance for rigs with different shoulder widths and leg lengths.
+ const type=v.bodyType;
  for(const [side,sign] of [['left',1],['right',-1]]){
-  if(gait){a[side+'Leg']=[30*gait*sign,0,0];a[side+'Knee']=[Math.max(0,-gait*sign)*38,0,0];a[side+'Arm']=[-20*gait*sign,0,0];}
+   if(actor.pose==='hips'&&['female','teen'].includes(type)){a[side+'Arm']=[15,-30*sign,12*sign];a[side+'Elbow']=[-80,0,0];}
+   if(actor.pose==='phone'&&side==='right')a.rightArm[2]-=({female:16,slim:4})[type]||0;
+   if(actor.pose==='cross'){
+     if(type==='slim')a[side+'Arm'][1]+=4*sign;
+     if(type==='teen')a[side+'Arm'][2]+=12*sign;
+     if(type==='female'){a[side+'Arm'][2]+=28*sign;a[side+'Arm'][0]-=side==='right'?26:10;}
+   }
+   if(type==='chibi'&&['sit','squat','knees'].includes(actor.pose)){
+     a[side+'Leg'][2]+=4*sign;a[side+'Knee'][0]-=4;
+   }
+ }
+ const running=actor.pose==='run';
+ const gait=distance&&t>0&&t<1?Math.sin(t*distance*(running?9:7))*Math.min(1,10*t,10*(1-t)):0;
+ for(const [side,sign] of [['left',1],['right',-1]]){
+  if(distance){a[side+'Arm']=[-20*gait*sign,0,9*sign];}
+  if(gait){a[side+'Leg']=[(running?43:30)*gait*sign,0,0];a[side+'Knee']=[Math.max(0,-gait*sign)*(running?70:38),0,0];}
  }
  v.root.updateMatrixWorld(true);
  for(const [key,bone] of Object.entries(v.joints)){
   if(!bone)continue;
   const preset=a[key]||[0,0,0],user=actor.jointAxes?.[key]||[actor.joints?.[key]||0,0,0];
-  applyAngles(v,key,preset.map((x,i)=>x+user[i]));
+  bone.scale.copy(v.parts[key]).multiplyScalar(T.MathUtils.clamp(actor.partScale?.[key]||1,.75,1.35));
+  const degrees=preset.map((x,i)=>x+user[i]);
+  if(key==='head' && v.neck.length){
+    const step=new T.Quaternion().setFromEuler(new T.Euler(...limitedAngles(key,degrees).map(x=>x/(1+v.neck.length))));
+    v.neck.forEach((b,i)=>{const basis=v.neckBases[i];b.quaternion.copy(basis).multiply(step).multiply(basis.clone().invert()).multiply(v.rest[b.name]);});
+    applyAngles(v,key,degrees.map(x=>x/(1+v.neck.length)));
+  }else applyAngles(v,key,degrees);
   if(actor.boneOverrides?.[key]){
     bone.quaternion.fromArray(actor.boneOverrides[key]);
     constrainBone(v,key);

@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
 import { sceneCollision } from './scene/collision.js';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=detail1';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=posefix2';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -118,7 +118,7 @@ function updateScene() {
   }
   for (const item of data.items.filter(item=>item.type==='actor')) {
     const progress=routePhase(item,time);
-    const walking=item.path.length>1 && item.pose==='stand' && !item.attached;
+    const walking=item.path.length>1 && ['stand','walk','run'].includes(item.pose) && !item.attached;
     const value=walking ? samplePath(item.path, progress) : {point:item.pos,yaw:item.yaw||0,distance:0};
     const {root}=item.visual;
     root.position.fromArray(value.point); root.rotation.y=value.yaw;
@@ -207,7 +207,7 @@ function select(id) {
   for (const button of $('objects').children) button.ariaPressed=String(button.dataset.id===id);
   $('selected-title').textContent={actor:'角色',camera:'机位',prop:'道具'}[item.type];
   $('name').value=item.name; $('note').value=item.note||''; $('note').parentElement.hidden=item.type==='prop';
-  const shownPosition=item.type==='camera'?cameraValue(item,time).pos:item.type==='actor'&&item.path.length>1&&item.pose==='stand'?samplePath(item.path,routePhase(item,time)).point:item.pos;
+  const shownPosition=item.type==='camera'?cameraValue(item,time).pos:item.type==='actor'&&item.path.length>1&&['stand','walk','run'].includes(item.pose)?samplePath(item.path,routePhase(item,time)).point:item.pos;
   shownPosition.forEach((value,i)=>$( ['x','y','z'][i]).value=value.toFixed(2));
   $('actor-tools').hidden=item.type!=='actor';
   $('camera-tools').hidden=item.type!=='camera';
@@ -229,6 +229,9 @@ function select(id) {
   $('draw-route').disabled=item.type==='camera' && item.keys.length>0;
   $('draw-route').title=$('draw-route').disabled?'此机位已有时间轴关键帧，可用新机位画路线':'';
   handle.position.fromArray(shownPosition);
+  const actorTurn=item.type==='actor'&&gizmoMode==='rotate';
+  transform.showX=transform.showZ=!actorTurn;
+  if(actorTurn)handle.position.y+=(item.visual.height||1.75)*(item.scale?.[1]||1)*.5;
   handle.rotation.set(...(item.rotation||[0,(item.yaw||0)*180/Math.PI,0]).map(T.MathUtils.degToRad));
   handle.scale.fromArray(item.scale||[1,1,1]);
   for(const [i,axis] of ['x','y','z'].entries()){$('r'+axis).value=((item.rotation||[0,(item.yaw||0)*180/Math.PI,0])[i]).toFixed(1);$('s'+axis).value=(item.scale||[1,1,1])[i].toFixed(2);}
@@ -419,7 +422,7 @@ function drawPath() {
   const points=draft.map(p=>new T.Vector3(p[0],.026,p[2]));
   if(points.length>1) pathGuide.add(new T.Line(new T.BufferGeometry().setFromPoints(points),new T.LineBasicMaterial({color:'#9ac0ff'})));
   for(const point of points.filter((_,i)=>i===0||i===points.length-1)){
-    const marker=new T.Mesh(new T.RingGeometry(.07,.125,24),new T.MeshBasicMaterial({color:'#bcd4ff',side:T.DoubleSide,depthTest:false}));
+    const marker=new T.Mesh(new T.RingGeometry(.07,.125,24),new T.MeshBasicMaterial({color:'#bcd4ff',side:T.DoubleSide,depthTest:true}));
     marker.rotation.x=-Math.PI/2;marker.position.copy(point);pathGuide.add(marker);
   }
 }
@@ -442,8 +445,9 @@ function endRoute(commit) {
   const {id,points}=routeDraft;routeDraft=null;
   if(commit&&points.length>=2){
     const item=get(id);
-    delete item.routeClips;item.path=points;item.pos=[...points[0]];
-    if(item.type==='actor') {item.pose='stand';item.attached=null;}
+    delete item.routeClips;
+    item.path=points.map((p,i)=>i===0||i===points.length-1?p:p.map((v,j)=>(points[i-1][j]+2*v+points[i+1][j])/4));item.pos=[...points[0]];
+    if(item.type==='actor') {if(!['walk','run'].includes(item.pose))item.pose='stand';item.attached=null;}
     setStatus(`已给「${item.name}」设置 ${points.length} 个路线点。点播放预演。`);
     tracks();save();
   }
@@ -498,7 +502,7 @@ window.addEventListener('keydown',event=>{
   if(event.key==='Escape'&&routeDraft)endRoute(false);
 });
 function move(item,next) {
-  const origin=item.type==='actor'&&item.path.length>1&&item.pose==='stand'?samplePath(item.path,routePhase(item,time)).point:item.pos;
+  const origin=item.type==='actor'&&item.path.length>1&&['stand','walk','run'].includes(item.pose)?samplePath(item.path,routePhase(item,time)).point:item.pos;
   const delta=next.map((n,i)=>n-origin[i]); item.pos=item.pos.map((n,i)=>n+delta[i]);
   item.path=item.path.map(p=>p.map((n,i)=>n+delta[i]));
   if(item.type==='camera'&&item.keys.length){
@@ -509,11 +513,14 @@ function move(item,next) {
   }
 }
 transform.addEventListener('dragging-changed',e=>{orbit.enabled=!e.value; if(e.value){playing=false;iconButton($('play'),'play','播放');}else{ select(currentId); tracks();save(); }});
-transform.addEventListener('objectChange',()=>{if(transform.dragging){const item=active();if(gizmoMode==='translate')move(item,handle.position.toArray());else if(gizmoMode==='rotate'){item.rotation=[handle.rotation.x,handle.rotation.y,handle.rotation.z].map(T.MathUtils.radToDeg);item.yaw=handle.rotation.y;if(item.type==='camera')item.manualRotation=true;}else item.scale=handle.scale.toArray().map(x=>Math.max(.1,x));drawPath();}});
+transform.addEventListener('objectChange',()=>{if(transform.dragging){const item=active();if(gizmoMode==='translate')move(item,handle.position.toArray());else if(gizmoMode==='rotate'){item.rotation=[handle.rotation.x,handle.rotation.y,handle.rotation.z].map(T.MathUtils.radToDeg);item.yaw=item.type==='actor'?Math.atan2(2*(handle.quaternion.w*handle.quaternion.y+handle.quaternion.x*handle.quaternion.z),1-2*(handle.quaternion.y**2+handle.quaternion.z**2)):handle.rotation.y;if(item.type==='actor')item.rotation=[0,T.MathUtils.radToDeg(item.yaw),0];if(item.type==='camera')item.manualRotation=true;}else if(item.type==='actor'){
+ const axis=({X:'x',Y:'y',Z:'z'})[transform.axis]||'x';
+ item.scale=Array(3).fill(T.MathUtils.clamp(handle.scale[axis],.1,3));
+ }else item.scale=handle.scale.toArray().map(x=>Math.max(.1,x));drawPath();}});
 $('name').onchange=event=>{ active().name=event.target.value.trim()||'未命名';lists();save(); };
 for(const [i,id] of ['x','y','z'].entries()) $(id).onchange=event=>{
   if(!Number.isFinite(event.target.valueAsNumber))return;
-  if(active().locked)return;const selected=active();const p=[...(selected.type==='camera'?cameraValue(selected,time).pos:selected.type==='actor'&&selected.path.length>1&&selected.pose==='stand'?samplePath(selected.path,routePhase(selected,time)).point:selected.pos)];p[i]=event.target.valueAsNumber;move(active(),p);select(currentId);tracks();save();
+  if(active().locked)return;const selected=active();const p=[...(selected.type==='camera'?cameraValue(selected,time).pos:selected.type==='actor'&&selected.path.length>1&&['stand','walk','run'].includes(selected.pose)?samplePath(selected.path,routePhase(selected,time)).point:selected.pos)];p[i]=event.target.valueAsNumber;move(active(),p);select(currentId);tracks();save();
 };
 for(const [key,label] of Object.entries(jointLabels)) $('joint').add(new Option(label,key));
 $('joint').onchange=()=>$('joint-angle').value=active().joints[$('joint').value]||0;
@@ -754,7 +761,7 @@ function syncPose(){
 }
 function applyPose(pose){
  const item=active();if(item.type!=='actor'||item.locked)return;
- item.pose=pose;item.joints={};item.jointAxes={};item.boneOverrides={};item.attached=null;seek(0);select(item.id);save();
+ item.pose=pose;item.joints={};item.jointAxes={};item.boneOverrides={};item.attached=null;seek(0);safeShapes=null;select(item.id);save();
 }
 function addAsset(kind,isActor){
  const id=crypto.randomUUID(),point=orbit.target.clone();point.y=0;
@@ -845,7 +852,7 @@ function initializeEditor(){
    b.setAttribute('aria-label',b.title);
   }
   b.onpointerdown=e=>{
-   e.stopPropagation();e.preventDefault();const item=active();if(item.locked||!item.visual.loaded)return;
+   if(e.button!==0)return; e.stopPropagation();e.preventDefault();const item=active();if(item.locked||!item.visual.loaded)return;
    seek(time);transform.detach();orbit.enabled=false;
    const origin=item.visual.endpoints[name].getWorldPosition(new T.Vector3());
    jointDrag={item,name,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,headAngles:[...(item.jointAxes?.head||[0,0,0])],plane:new T.Plane().setFromNormalAndCoplanarPoint(sceneCamera.getWorldDirection(new T.Vector3()),origin)};b.setPointerCapture(e.pointerId);b.classList.add('dragging');setStatus('正在调整'+label+' · 松开保存，⌘Z 撤销');
@@ -870,7 +877,7 @@ function initializeEditor(){
  $('undo').onclick=()=>historyStep(-1);$('redo').onclick=()=>historyStep(1);
  for(const [i,axis] of ['x','y','z'].entries()){
   $('r'+axis).onchange=e=>{const item=active();if(item.locked||!Number.isFinite(e.target.valueAsNumber))return;item.rotation||=[0,(item.yaw||0)*180/Math.PI,0];item.rotation[i]=e.target.valueAsNumber;item.yaw=item.rotation[1]*Math.PI/180;if(item.type==='camera')item.manualRotation=true;select(currentId);save();};
-  $('s'+axis).onchange=e=>{const item=active();if(item.locked||!Number.isFinite(e.target.valueAsNumber))return;item.scale||=[1,1,1];item.scale[i]=Math.max(.1,e.target.valueAsNumber);select(currentId);save();};
+  $('s'+axis).onchange=e=>{const item=active();if(item.locked||!Number.isFinite(e.target.valueAsNumber))return;item.scale||=[1,1,1];item.scale[i]=Math.max(.1,e.target.valueAsNumber);if(item.type==='actor')item.scale.fill(item.scale[i]);select(currentId);save();};
  }
  $('uniform-scale').oninput=e=>{if(active().locked)return;active().scale=Array(3).fill(e.target.valueAsNumber);};$('uniform-scale').onchange=()=>{select(currentId);save();};
  $('actor-color').oninput=e=>{const item=active();if(item.locked)return;item.color=e.target.value;item.visual.root.traverse(n=>{if(n.isMesh&&n.material?.color)n.material.color.set(item.color);});};$('actor-color').onchange=save;
@@ -883,13 +890,31 @@ function initializeEditor(){
  $('export-project').onclick=()=>{const blob=new Blob([serialize()],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='导演台工程.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);setStatus('工程已导出为 JSON，可继续编辑；截图是 PNG，录像是 MP4 / WebM。');};
  $('import-project').onclick=()=>$('project-file').click();$('project-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('工程文件过大');restore(await file.text());save();setStatus('工程已打开。');}catch(error){setStatus('无法打开：'+error.message);}e.target.value='';};
  $('help').onclick=()=>window.open('../guide/','_blank','noopener');
+ function actorMenu(event,part){
+   const menu=$('context-menu');menu.replaceChildren();
+   const add=(label,fn)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{menu.hidden=true;fn()};menu.append(b)};
+   for(const pose of ['stand','sit','squat','lie','cross'])add(poseNames[pose],()=>applyPose(pose));
+   if(part){for(const [label,delta] of [['放大',.1],['缩小',-.1]])add(jointLabels[part]+' · '+label,()=>{
+     const item=active();item.partScale||={};item.partScale[part]=T.MathUtils.clamp((item.partScale[part]||1)+delta,.75,1.35);save();
+   });}
+   add('删除角色',()=>$('delete').click());menu.hidden=false;
+   Object.assign(menu.style,{position:'fixed',left:Math.max(0,Math.min(event.clientX,innerWidth-menu.offsetWidth))+'px',top:Math.max(0,Math.min(event.clientY,innerHeight-menu.offsetHeight))+'px'});
+ }
+ $('objects').addEventListener('contextmenu',e=>{
+   const id=e.target.closest('[data-id]')?.dataset.id;
+   if(get(id)?.type!=='actor'||get(id).locked||recorder)return;
+   e.preventDefault();select(id);actorMenu(e,null);
+ });
  stage.addEventListener('contextmenu',e=>{
-  e.preventDefault();if(pointerTravel>5||cameraMode||recorder)return;
-  const r=stage.getBoundingClientRect();raycaster.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),sceneCamera);
-  const hit=raycaster.intersectObjects(data.items.filter(i=>!i.hidden&&!i.locked).map(i=>i.visual.root),true)[0];
-  if(hit){let n=hit.object;while(n&&!n.userData.entity)n=n.parent;if(n)select(n.userData.entity);}
-  if(active().type!=='actor'||active().locked)return;
-  const menu=$('context-menu');menu.replaceChildren(...['stand','sit','squat','lie','raise','tpose'].map(p=>{const b=document.createElement('button');b.textContent=poseNames[p];b.onclick=()=>{applyPose(p);menu.hidden=true;};return b;}));menu.style.left=Math.min(e.clientX-r.left,r.width-180)+'px';menu.style.top=Math.min(e.clientY-r.top,r.height-235)+'px';menu.hidden=false;
+   e.preventDefault();if(cameraMode||recorder)return;
+   const r=stage.getBoundingClientRect();raycaster.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),sceneCamera);
+   const hit=raycaster.intersectObjects(data.items.filter(i=>!i.hidden&&!i.locked).map(i=>i.visual.root),true)[0];
+   const end=e.target.closest('[data-endpoint]')?.dataset.endpoint;
+   if(!end&&!hit)return;
+   if(!end){let n=hit.object;while(n&&!n.userData.entity)n=n.parent;if(n)select(n.userData.entity);}
+   const item=active();if(item.type!=='actor'||item.locked||!item.visual.loaded)return;
+   const part=end?end.replace('Hand','Wrist').replace('Foot','Ankle'):Object.entries(item.visual.joints).sort((a,b)=>a[1].getWorldPosition(new T.Vector3()).distanceToSquared(hit.point)-b[1].getWorldPosition(new T.Vector3()).distanceToSquared(hit.point))[0][0];
+   actorMenu(e,part);
  });
  window.addEventListener('pointerdown',e=>{if(!e.target.closest('#context-menu'))$('context-menu').hidden=true;});
  window.addEventListener('keydown',e=>{
