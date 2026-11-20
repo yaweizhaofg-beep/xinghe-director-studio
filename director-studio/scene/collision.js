@@ -19,7 +19,8 @@ export function actorCapsules(item){
  const factor=v.height/1.75*Math.max(...(item.scale||[1,1,1]));const bulk=({muscular:1.16,broad:1.18,slim:.88})[item.bodyType]||1;
  const defs=[['torso','Waist','Spine02',.145],['pelvis','L_Thigh','R_Thigh',.105],['head','Head','Head',.115*(item.bodyType==='chibi'?1.8:item.bodyType==='child'?1.3:1)]];
  for(const side of ['L','R'])defs.push([side+'upperarm',side+'_Upperarm',side+'_Forearm',.058],[side+'forearm',side+'_Forearm',side+'_Hand',.048],[side+'hand',side+'_Hand',side+'_Hand',.06],[side+'thigh',side+'_Thigh',side+'_Calf',.078],[side+'calf',side+'_Calf',side+'_Foot',.058],[side+'foot',side+'_Foot',side+'_ToeBase',.04]);
- return defs.map(([name,start,end,r])=>{const a=p(start),b=p(end);if(name==='torso')a.lerp(b,.25);if(name.endsWith('calf'))b.lerp(a,.12);return {name,start,end,a,b,r:r*factor*bulk*(name==='torso'&&item.bodyType==='teen'?.78:1),actor:item.id,label:item.name};});
+ return defs.map(([name,start,end,r])=>{const a=p(start),b=p(end);if(name.endsWith('hand')&&v.palms){const side=name[0],hand=v.model.getObjectByName(side+'_Hand');b.copy(v.palms[side]).applyMatrix4(hand.matrixWorld);r=.038*(item.partScale?.[side==='L'?'leftWrist':'rightWrist']||1);}
+ if(name==='torso')a.lerp(b,.25);if(name.endsWith('calf'))b.lerp(a,.12);return {name,start,end,a,b,r:r*factor*bulk*(name==='torso'&&item.bodyType==='teen'?.78:1),actor:item.id,label:item.name};});
 }
 function selfPair(a,b){
  if(a.start===b.start||a.start===b.end||a.end===b.start||a.end===b.end)return false;

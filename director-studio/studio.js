@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
-import { sceneCollision } from './scene/collision.js';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=posefix2';
+import { sceneCollision } from './scene/collision.js?v=palm2';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=gait3';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -136,7 +136,7 @@ function updateScene() {
       const rig=item.visual;
       if(rig.loaded){
         const posedPosition=root.position.clone(),posedRotation=root.quaternion.clone();
-        for(const bone of Object.values(rig.joints))if(bone)bone.quaternion.copy(rig.rest[bone.name].clone().slerp(bone.quaternion,strength));
+        for(const bone of [...Object.values(rig.joints),...rig.clavicles,...rig.neck])if(bone)bone.quaternion.copy(rig.rest[bone.name].clone().slerp(bone.quaternion,strength));
         root.position.lerpVectors(new T.Vector3().fromArray(value.point),posedPosition,strength);
         root.quaternion.slerpQuaternions(new T.Quaternion().setFromEuler(new T.Euler(0,value.yaw,0)),posedRotation,strength);
       }
@@ -230,7 +230,7 @@ function select(id) {
   $('draw-route').title=$('draw-route').disabled?'此机位已有时间轴关键帧，可用新机位画路线':'';
   handle.position.fromArray(shownPosition);
   const actorTurn=item.type==='actor'&&gizmoMode==='rotate';
-  transform.showX=transform.showZ=!actorTurn;
+  transform.showX=transform.showY=transform.showZ=true;
   if(actorTurn)handle.position.y+=(item.visual.height||1.75)*(item.scale?.[1]||1)*.5;
   handle.rotation.set(...(item.rotation||[0,(item.yaw||0)*180/Math.PI,0]).map(T.MathUtils.degToRad));
   handle.scale.fromArray(item.scale||[1,1,1]);
@@ -423,7 +423,7 @@ function drawPath() {
   if(points.length>1) pathGuide.add(new T.Line(new T.BufferGeometry().setFromPoints(points),new T.LineBasicMaterial({color:'#9ac0ff'})));
   for(const point of points.filter((_,i)=>i===0||i===points.length-1)){
     const marker=new T.Mesh(new T.RingGeometry(.07,.125,24),new T.MeshBasicMaterial({color:'#bcd4ff',side:T.DoubleSide,depthTest:true}));
-    marker.rotation.x=-Math.PI/2;marker.position.copy(point);pathGuide.add(marker);
+    marker.userData.endpoint=true;marker.rotation.x=-Math.PI/2;marker.position.copy(point);pathGuide.add(marker);
   }
 }
 function draftUi() {
@@ -513,7 +513,7 @@ function move(item,next) {
   }
 }
 transform.addEventListener('dragging-changed',e=>{orbit.enabled=!e.value; if(e.value){playing=false;iconButton($('play'),'play','播放');}else{ select(currentId); tracks();save(); }});
-transform.addEventListener('objectChange',()=>{if(transform.dragging){const item=active();if(gizmoMode==='translate')move(item,handle.position.toArray());else if(gizmoMode==='rotate'){item.rotation=[handle.rotation.x,handle.rotation.y,handle.rotation.z].map(T.MathUtils.radToDeg);item.yaw=item.type==='actor'?Math.atan2(2*(handle.quaternion.w*handle.quaternion.y+handle.quaternion.x*handle.quaternion.z),1-2*(handle.quaternion.y**2+handle.quaternion.z**2)):handle.rotation.y;if(item.type==='actor')item.rotation=[0,T.MathUtils.radToDeg(item.yaw),0];if(item.type==='camera')item.manualRotation=true;}else if(item.type==='actor'){
+transform.addEventListener('objectChange',()=>{if(transform.dragging){const item=active();if(gizmoMode==='translate')move(item,handle.position.toArray());else if(gizmoMode==='rotate'){item.rotation=[handle.rotation.x,handle.rotation.y,handle.rotation.z].map(T.MathUtils.radToDeg);item.yaw=handle.rotation.y;if(item.type==='camera')item.manualRotation=true;}else if(item.type==='actor'){
  const axis=({X:'x',Y:'y',Z:'z'})[transform.axis]||'x';
  item.scale=Array(3).fill(T.MathUtils.clamp(handle.scale[axis],.1,3));
  }else item.scale=handle.scale.toArray().map(x=>Math.max(.1,x));drawPath();}});
@@ -612,6 +612,9 @@ function frame(now) {
   updateScene();
   enforceCollisions();
   for(const item of data.items)item.visual.root.visible=!item.hidden;
+  for(const marker of pathGuide.children.filter(n=>n.userData.endpoint)){
+    marker.visible=!data.items.some(i=>i.type==='actor'&&!i.hidden&&Math.hypot(i.visual.root.position.x-marker.position.x,i.visual.root.position.z-marker.position.z)<.27*(i.scale?.[0]||1));
+  }
   updateJointHandles();
   filmCamera.updateMatrixWorld();
   grid.visible=pathGuide.visible=transform.getHelper().visible=false;

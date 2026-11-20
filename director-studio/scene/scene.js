@@ -67,6 +67,41 @@ export const poseNames={stand:'站立',tpose:'T型',walk:'行走',run:'跑步',s
 const boneNames={body:'Waist',head:'Head',leftArm:'L_Upperarm',rightArm:'R_Upperarm',leftElbow:'L_Forearm',rightElbow:'R_Forearm',leftLeg:'L_Thigh',rightLeg:'R_Thigh',leftKnee:'L_Calf',rightKnee:'R_Calf',leftWrist:'L_Hand',rightWrist:'R_Hand',leftAnkle:'L_Foot',rightAnkle:'R_Foot'};
 
 const loader = new GLTFLoader(), modelCache = new Map();
+// Keep a small set of real sole vertices (heel, toe and side edges) for ground contact.
+function measureFeet(visual){
+ const samples=new Map(), point=new T.Vector3();
+ visual.model.traverse(mesh=>{
+   if(!mesh.isSkinnedMesh)return;
+   const count=mesh.geometry.attributes.position.count;
+   for(let i=0;i<count;i++){
+     mesh.getVertexPosition(i,point).applyMatrix4(mesh.matrixWorld);
+     if(point.y>visual.height*.13)continue;
+     const cell=[point.x,point.z].map(v=>Math.round(v/(visual.height*.025))).join(',');
+     if(!samples.has(cell)||samples.get(cell).y>point.y)samples.set(cell,{mesh,i,y:point.y});
+   }
+ });
+ return [...samples.values()];
+}
+function gaitAngles(a,v,t,distance,running){
+ const length=v.legLength, stride=length*(running?1.75:1.12);
+ const travel=t*distance, envelope=T.MathUtils.smoothstep(Math.min(travel,distance-travel),0,stride*.32);
+ const cycle=travel/stride, stance=running?.49:.60;
+ for(const [side,offset,sign] of [['left',0,1],['right',.5,-1]]){
+   const phase=(cycle+offset)%1, swing=phase>=stance;
+   const u=swing?(phase-stance)/(1-stance):phase/stance;
+   const step=stride*stance, forward=step*(swing?T.MathUtils.smoothstep(u,0,1)-.5:.5-u);
+   const lift=swing?Math.sin(Math.PI*u)**2*length*(running?.19:.105):0;
+   const down=length*.94-lift;
+   const knee=2*Math.acos(T.MathUtils.clamp(Math.hypot(forward,down)/length,0,1));
+   const hip=-Math.atan2(forward,down)-knee/2;
+   a[side+'Leg']=[T.MathUtils.radToDeg(hip)*envelope,0,0];
+   a[side+'Knee']=[T.MathUtils.radToDeg(knee)*envelope,0,0];
+   a[side+'Ankle']=[-T.MathUtils.radToDeg(hip+knee)*envelope,0,0];
+   a[side+'Arm']=[forward/step*(running?60:35)*envelope,0,9*sign];
+   a[side+'Elbow']=[-(running?65:14)*envelope,0,0];
+ }
+ a.body=[(running?8:3)*envelope,3*Math.sin(cycle*2*Math.PI)*envelope,0];
+}
 export function buildActor(color,bodyType='male') {
   const root=new T.Group(),head=new T.Bone();head.position.y=1.6;root.add(head);
   const visual={root,joints:{head},loaded:false};
@@ -96,10 +131,41 @@ export function buildActor(color,bodyType='male') {
     visual.neckBases=visual.neck.map(b=>b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(root.getWorldQuaternion(new T.Quaternion())));
     visual.pelvis=model.getObjectByName('Hip');visual.hipY=visual.pelvis.position.clone();
     visual.endpoints={leftHand:model.getObjectByName('L_Hand'),rightHand:model.getObjectByName('R_Hand'),leftFoot:model.getObjectByName('L_Foot'),rightFoot:model.getObjectByName('R_Foot'),leftElbow:model.getObjectByName('L_Forearm'),rightElbow:model.getObjectByName('R_Forearm'),leftKnee:model.getObjectByName('L_Calf'),rightKnee:model.getObjectByName('R_Calf'),head:model.getObjectByName('Head')};
+    const world=n=>model.getObjectByName(n).getWorldPosition(new T.Vector3());
+    visual.legLength=world('L_Thigh').distanceTo(world('L_Calf'))+world('L_Calf').distanceTo(world('L_Foot'));
+    visual.soles=measureFeet(visual);
+    visual.palms={};
+    for(const side of ['L','R']){
+      const hand=model.getObjectByName(side+'_Hand'),elbow=model.getObjectByName(side+'_Forearm');
+      const origin=hand.getWorldPosition(new T.Vector3());
+      const axis=origin.clone().sub(elbow.getWorldPosition(new T.Vector3())).normalize();
+      let reach=0;const point=new T.Vector3();
+      model.traverse(mesh=>{
+        if(!mesh.isSkinnedMesh)return;
+        const skin=mesh.geometry.attributes.skinIndex,weights=mesh.geometry.attributes.skinWeight;
+        const index=mesh.skeleton.bones.indexOf(hand);
+        for(let i=0;i<skin.count;i++)if(skin.getX(i)===index&&weights.getX(i)>.45){
+          mesh.getVertexPosition(i,point).applyMatrix4(mesh.matrixWorld);
+          reach=Math.max(reach,point.sub(origin).dot(axis));
+        }
+      });
+      visual.palms[side]=hand.worldToLocal(origin.addScaledVector(axis,Math.max(0,reach-.035*height/1.75)));
+    }
+    visual.clavicles=['L','R'].map(side=>model.getObjectByName(side+'_Clavicle'));
+
     visual.loaded=true;return visual;
   }).catch(error=>{visual.error=error.message;modelCache.delete(bodyType);return visual;});
   return visual;
 }
+// Shoulder XYZ and elbow flexion for each arm; fit palm reach separately for each body.
+const crossedArms={"male": [3, -63, -4, -105, -30, 61, 26, -98],
+  "female": [10, -62, 22, -99, -65, 60, 26, -85],
+  "muscular": [-38, -62, -26, -75, -60, 60, 26, -74],
+  "slim": [-13, -62, -11, -93, -34, 60, 18, -91],
+  "teen": [5, -62, 0, -109, -48, 61, 26, -90],
+  "child": [-30, -62, -25, -89, -48, 60, 26, -91],
+  "broad": [-35, -63, -25, -76, -46, 60, 27, -84],
+  "chibi": [-37, -61, -25, -75, -57, 61, 26, -84]};
 function anglesFor(pose) {
  const a={};const put=(k,x=0,y=0,z=0)=>a[k]=[x,y,z];
  if(pose==='tpose'){put('leftArm',0,0,80);put('rightArm',0,0,-80);}
@@ -114,7 +180,7 @@ function anglesFor(pose) {
  if(pose==='bow'){put('body',45);put('head',20);}
  if(pose==='lean'){put('body',0,0,14);put('leftKnee',30);}
  if(pose==='think'||pose==='phone'){put('rightArm',pose==='think'?-86:-8,55,12);put('rightElbow',pose==='think'?-119:-120);put('head',12);}
- if(pose==='cross'){put('leftArm',-32,-62,-23);put('rightArm',-48,60,23);put('leftElbow',-106);put('rightElbow',-105);}
+
  if(pose==='hips'){put('leftArm',18,0,-15);put('rightArm',18,0,15);put('leftElbow',-88);put('rightElbow',-88);}
  if(pose==='fight'){put('leftArm',-70);put('rightArm',-55);put('leftElbow',-85);put('rightElbow',-105);put('leftLeg',-20);put('rightKnee',30);}
  if(pose==='kick'){put('leftLeg',-75);put('leftKnee',15);put('rightArm',-45);}
@@ -163,20 +229,16 @@ export function renderPose(actor,t,distance) {
    if(actor.pose==='hips'&&['female','teen'].includes(type)){a[side+'Arm']=[15,-30*sign,12*sign];a[side+'Elbow']=[-80,0,0];}
    if(actor.pose==='phone'&&side==='right')a.rightArm[2]-=({female:16,slim:4})[type]||0;
    if(actor.pose==='cross'){
-     if(type==='slim')a[side+'Arm'][1]+=4*sign;
-     if(type==='teen')a[side+'Arm'][2]+=12*sign;
-     if(type==='female'){a[side+'Arm'][2]+=28*sign;a[side+'Arm'][0]-=side==='right'?26:10;}
+     const angles=crossedArms[type]||crossedArms.male,offset=sign===1?0:4;
+     a[side+'Arm']=angles.slice(offset,offset+3);
+     a[side+'Elbow']=[angles[offset+3],0,0];
    }
    if(type==='chibi'&&['sit','squat','knees'].includes(actor.pose)){
      a[side+'Leg'][2]+=4*sign;a[side+'Knee'][0]-=4;
    }
  }
- const running=actor.pose==='run';
- const gait=distance&&t>0&&t<1?Math.sin(t*distance*(running?9:7))*Math.min(1,10*t,10*(1-t)):0;
- for(const [side,sign] of [['left',1],['right',-1]]){
-  if(distance){a[side+'Arm']=[-20*gait*sign,0,9*sign];}
-  if(gait){a[side+'Leg']=[(running?43:30)*gait*sign,0,0];a[side+'Knee']=[Math.max(0,-gait*sign)*(running?70:38),0,0];}
- }
+ const floorY=v.root.position.y;
+ if(distance)gaitAngles(a,v,t,distance/Math.max(.1,scale[1]),actor.pose==='run');
  v.root.updateMatrixWorld(true);
  for(const [key,bone] of Object.entries(v.joints)){
   if(!bone)continue;
@@ -193,6 +255,30 @@ export function renderPose(actor,t,distance) {
     constrainBone(v,key);
   }
   bone.updateMatrixWorld(true);
+ }
+ // Share high-arm elevation with the shoulder girdle while preserving upper-arm orientation.
+ for(const [i,side] of ['left','right'].entries()){
+   const clavicle=v.clavicles[i],arm=v.joints[side+'Arm'];
+   if(!clavicle)continue;
+   const elbow=v.joints[side+'Elbow'].getWorldPosition(new T.Vector3());
+   const direction=elbow.sub(arm.getWorldPosition(new T.Vector3())).normalize().applyQuaternion(v.root.getWorldQuaternion(new T.Quaternion()).invert());
+   const rise=T.MathUtils.clamp((Math.acos(T.MathUtils.clamp(-direction.y,-1,1))-1.20)*.12,0,.095);
+   if(!rise||type==='chibi')continue;
+   const world=arm.getWorldQuaternion(new T.Quaternion());
+   const axis=new T.Vector3(0,0,i?-1:1).applyQuaternion(v.root.getWorldQuaternion(new T.Quaternion())).applyQuaternion(clavicle.parent.getWorldQuaternion(new T.Quaternion()).invert());
+   clavicle.quaternion.premultiply(new T.Quaternion().setFromAxisAngle(axis,rise));clavicle.updateWorldMatrix(true,false);
+   arm.quaternion.copy(clavicle.getWorldQuaternion(new T.Quaternion()).invert().multiply(world));
+   arm.updateMatrixWorld(true);
+ }
+ if(rotation[0]||rotation[2]){
+   const pivot=new T.Vector3(0,v.height*scale[1]*.5,0);
+   v.root.position.add(pivot.clone().sub(pivot.applyQuaternion(v.root.quaternion)));
+ }
+ if((distance || rotation[0] || rotation[2]) && v.soles.length){
+   v.root.updateMatrixWorld(true);
+   const point=new T.Vector3();let low=Infinity;
+   for(const {mesh,i} of v.soles)low=Math.min(low,mesh.getVertexPosition(i,point).applyMatrix4(mesh.matrixWorld).y);
+   v.root.position.y+=distance?floorY-low:Math.max(0,floorY-low);
  }
  if(['sit','squat','kneel','knees'].includes(actor.pose))v.root.position.y-=({sit:.42,squat:.62,kneel:.55,knees:.55})[actor.pose]*(scale[1]||1)*v.height/1.75;
  if(actor.pose==='lie'){v.root.rotation.x=-Math.PI/2;v.root.position.y+=.2;}
