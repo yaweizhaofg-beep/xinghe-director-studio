@@ -1,4 +1,4 @@
-import {preserveJointVolume} from './skin.js';
+import {preserveJointVolume} from './skin.js?v=socket6';
 import { clone as cloneSkeleton } from '../../vendor/three/SkeletonUtils.js';
 import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import * as T from '../../vendor/three/three.module.js';

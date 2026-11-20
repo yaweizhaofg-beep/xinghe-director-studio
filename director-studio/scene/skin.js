@@ -3,9 +3,64 @@
 // on different parts never gain edges. Rest geometry and GLBs remain unchanged.
 import * as T from '../../vendor/three/three.module.js';
 
+// The supplied meshes have a recessed, hard-edged shoulder socket. Fair only
+// that ring in bind space and spread its influences across connected triangles.
+function softenShoulderSockets(mesh,geometry){
+  const {position,skinWeight,skinIndex}=geometry.attributes;
+  const inverse=mesh.matrixWorld.clone().invert();
+  const pivot=side=>mesh.skeleton.bones.find(b=>b.name===side+'_Upperarm').getWorldPosition(new T.Vector3()).applyMatrix4(inverse);
+  const left=pivot('L'),right=pivot('R'),width=left.distanceTo(right);
+  const verts=[],coords=[],group=[],lookup=new Map(),near=[],weights=[],neighbors=[];
+  for(let i=0;i<position.count;i++){
+    const p=new T.Vector3().fromBufferAttribute(position,i),key=p.toArray().join('/');
+    if(!lookup.has(key)){
+      lookup.set(key,coords.length);coords.push(p);neighbors.push(new Set());verts.push([]);
+      near.push(1-T.MathUtils.smoothstep(Math.min(p.distanceTo(left),p.distanceTo(right))/width,.25,.57));
+      const w=new Map();
+      for(let k=0;k<4;k++){const n=skinWeight.getComponent(i,k),j=skinIndex.getComponent(i,k);if(n)w.set(j,(w.get(j)||0)+n);}
+      weights.push(w);
+    }
+    const id=lookup.get(key);group.push(id);verts[id].push(i);
+  }
+  const idx=geometry.index;
+  for(let i=0;i<(idx?.count||position.count);i+=3)for(let k=0;k<3;k++){
+    const a=group[idx?idx.getX(i+k):i+k],b=group[idx?idx.getX(i+(k+1)%3):i+(k+1)%3];
+    if(a!==b){neighbors[a].add(b);neighbors[b].add(a);}
+  }
+  const active=coords.map((_,i)=>i).filter(i=>near[i]>0&&neighbors[i].size);
+  for(let pass=0;pass<16;pass++){
+    const points=[],next=[];
+    for(const i of active){
+      const f=near[i]*.52,mean=new T.Vector3(),mix=new Map();
+      for(const [b,w] of weights[i])mix.set(b,w*(1-f));
+      for(const j of neighbors[i]){
+        mean.add(coords[j]);
+        for(const [b,w] of weights[j])mix.set(b,(mix.get(b)||0)+w*f/neighbors[i].size);
+      }
+      points.push(coords[i].clone().lerp(mean.divideScalar(neighbors[i].size),f));
+      next.push(new Map([...mix].sort((a,b)=>b[1]-a[1]).slice(0,4)));
+    }
+    active.forEach((i,k)=>{coords[i]=points[k];weights[i]=next[k];});
+  }
+  for(const i of active){
+    const p=coords[i],entries=[...weights[i]],sum=entries.reduce((n,e)=>n+e[1],0);
+    for(const v of verts[i]){
+      position.setXYZ(v,p.x,p.y,p.z);
+      for(let k=0;k<4;k++){skinIndex.setComponent(v,k,entries[k]?.[0]||0);skinWeight.setComponent(v,k,(entries[k]?.[1]||0)/sum);}
+    }
+  }
+  // Preserve authored shading elsewhere; smooth UV-seam duplicates in the socket.
+  const authored=geometry.attributes.normal.clone();geometry.computeVertexNormals();
+  const computed=geometry.attributes.normal,n=new T.Vector3(),tmp=new T.Vector3();
+  for(let i=0;i<verts.length;i++){
+    n.set(0,0,0);for(const v of verts[i])n.add(tmp.fromBufferAttribute(computed,v));n.normalize();
+    for(const v of verts[i]){tmp.fromBufferAttribute(authored,v).lerp(n,near[i]).normalize();computed.setXYZ(v,tmp.x,tmp.y,tmp.z);}
+  }
+}
 export function preserveJointVolume(mesh){
   if(!mesh.isSkinnedMesh)return;
   const geometry=mesh.geometry=mesh.geometry.clone();
+  softenShoulderSockets(mesh,geometry);
   const {position,skinWeight,skinIndex}=geometry.attributes;
   const index=geometry.index, reps=[],unique=new Map(),vertexIds=[],free=[],edges=[];
   for(let i=0;i<position.count;i++){
