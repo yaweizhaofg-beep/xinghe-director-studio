@@ -151,6 +151,8 @@ export function buildActor(color,bodyType='male') {
       });
       visual.palms[side]=hand.worldToLocal(origin.addScaledVector(axis,Math.max(0,reach-.035*height/1.75)));
     }
+    visual.chestBindInverse=model.getObjectByName('Spine02').getWorldQuaternion(new T.Quaternion()).invert();
+    visual.armBeforeClavicle={left:new T.Quaternion(),right:new T.Quaternion()};
     visual.clavicles=['L','R'].map(side=>model.getObjectByName(side+'_Clavicle'));
 
     visual.loaded=true;return visual;
@@ -159,7 +161,7 @@ export function buildActor(color,bodyType='male') {
 }
 // Shoulder XYZ and elbow flexion for each arm; fit palm reach separately for each body.
 const crossedArms={"male": [3, -63, -4, -105, -30, 61, 26, -98],
-  "female": [10, -62, 22, -99, -65, 60, 26, -85],
+  "female": [10, -62, 22, -99, -65, 60, 24, -85],
   "muscular": [-38, -62, -26, -75, -60, 60, 26, -74],
   "slim": [-13, -62, -11, -93, -34, 60, 18, -91],
   "teen": [5, -62, 0, -109, -48, 61, 26, -90],
@@ -203,7 +205,15 @@ export function jointRange(key){
 }
 function limitedAngles(key,degrees){
  const bounds=jointRange(key);
- return degrees.map((v,i)=>T.MathUtils.degToRad(T.MathUtils.clamp(Number.isFinite(v)?v:0,...bounds[i])));
+ const angles=degrees.map((v,i)=>T.MathUtils.clamp(Number.isFinite(v)?v:0,...bounds[i]));
+ // A rectangular per-axis range admits impossible corner poses. Taper multi-axis extremes.
+ if(!/Elbow|Knee/.test(key)){
+   const usage=angles.map((x,i)=>x/(Math.abs(bounds[i][x<0?0:1])||1));
+   const budget=/Arm|Leg/.test(key)?1.40:1;
+   const shrink=Math.max(1,Math.hypot(...usage)/budget);
+   return angles.map(x=>radians(x/shrink));
+ }
+ return angles.map(radians);
 }
 function applyAngles(v,key,angles){
  const basis=v.bases[key],bone=v.joints[key];
@@ -215,6 +225,56 @@ export function constrainBone(v,key){
  const delta=basis.clone().invert().multiply(bone.quaternion).multiply(v.rest[bone.name].clone().invert()).multiply(basis).normalize();
  const e=new T.Euler().setFromQuaternion(delta,'XYZ');
  applyAngles(v,key,[e.x,e.y,e.z].map(T.MathUtils.radToDeg));
+}
+function armClearance(v,side){
+ const pos=bone=>bone.getWorldPosition(new T.Vector3());
+ const arm=v.joints[side+'Arm'],elbow=v.joints[side+'Elbow'],wrist=v.joints[side+'Wrist'];
+ const shoulder=pos(arm),e=pos(elbow).sub(shoulder),w=pos(wrist).sub(shoulder);
+ const length=e.length()+e.distanceTo(w)||1;
+ const inverse=v.model.getObjectByName('Spine02').getWorldQuaternion(new T.Quaternion()).multiply(v.chestBindInverse).invert();
+ e.applyQuaternion(inverse).divideScalar(length);w.applyQuaternion(inverse).divideScalar(length);
+ return Math.min(e.z+.20,w.z+.27,.018-Math.max(0,e.y)*Math.max(0,-e.z));
+}
+// Search only the rig's permitted anatomical axes, starting from its current pose.
+export function reachJoint(item,name,target,chain){
+ const v=item.visual,endpoint=v.endpoints[name],side=name.startsWith('left')?'left':'right';
+ const isArm=/Hand|Elbow/.test(name);
+ const at=b=>b.getWorldPosition(new T.Vector3());
+ const arm=v.joints[side+'Arm'],elbow=v.joints[side+'Elbow'];
+ const length=at(elbow).distanceTo(at(arm))+at(elbow).distanceTo(at(v.joints[side+'Wrist']));
+ function cost(){
+   if(isArm&&armClearance(v,side)<0)return Infinity;
+   return at(endpoint).distanceToSquared(target)/(length*length);
+ }
+ const xyz=(key)=>{
+   const bone=v.joints[key],basis=v.bases[key];
+   const delta=basis.clone().invert().multiply(bone.quaternion).multiply(v.rest[bone.name].clone().invert()).multiply(basis);
+   const e=new T.Euler().setFromQuaternion(delta.normalize(),'XYZ');
+   return [e.x,e.y,e.z].map(T.MathUtils.radToDeg);
+ };
+ // Remove the display-only clavicle correction before reading/writing local overrides.
+ if(isArm && v.armBeforeClavicle?.[side]){
+   v.clavicles[side==='left'?0:1].quaternion.copy(v.rest[v.clavicles[side==='left'?0:1].name]);
+   arm.quaternion.copy(v.armBeforeClavicle[side]);v.root.updateMatrixWorld(true);
+ }
+ let score=cost();
+ for(const step of [8,5,3,1.5]){
+   for(const key of chain){
+     const bone=v.joints[key],base=xyz(key);let best=bone.quaternion.clone();
+     for(let axis=0;axis<3;axis++){
+       if(jointRange(key)[axis][1]===jointRange(key)[axis][0])continue;
+       for(const sign of [-1,1]){
+         const angles=[...base];angles[axis]+=sign*step;applyAngles(v,key,angles);bone.updateMatrixWorld(true);
+         const next=cost();
+         if(next+.000001<score){best=bone.quaternion.clone();score=next;}
+       }
+     }
+     bone.quaternion.copy(best);bone.updateMatrixWorld(true);
+   }
+ }
+ item.boneOverrides||={};
+ for(const key of chain)item.boneOverrides[key]=v.joints[key].quaternion.toArray();
+ if(isArm){v.armBeforeClavicle[side].copy(arm.quaternion);}
 }
 export function renderPose(actor,t,distance) {
  const v=actor.visual;
@@ -259,6 +319,15 @@ export function renderPose(actor,t,distance) {
  // Share high-arm elevation with the shoulder girdle while preserving upper-arm orientation.
  for(const [i,side] of ['left','right'].entries()){
    const clavicle=v.clavicles[i],arm=v.joints[side+'Arm'];
+   // The same limit also applies to sliders, clips and poses stored by older versions.
+   if(armClearance(v,side)<0){
+     const wanted=arm.quaternion.clone(),rest=v.rest[arm.name];
+     for(let i=1;i<=12;i++){
+       arm.quaternion.slerpQuaternions(wanted,rest,i/12);arm.updateMatrixWorld(true);
+       if(armClearance(v,side)>=0)break;
+     }
+   }
+   v.armBeforeClavicle[side].copy(arm.quaternion);
    if(!clavicle)continue;
    const elbow=v.joints[side+'Elbow'].getWorldPosition(new T.Vector3());
    const direction=elbow.sub(arm.getWorldPosition(new T.Vector3())).normalize().applyQuaternion(v.root.getWorldQuaternion(new T.Quaternion()).invert());

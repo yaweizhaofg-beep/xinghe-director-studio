@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
 import { sceneCollision } from './scene/collision.js?v=palm2';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, constrainBone, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=gait3';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, reachJoint, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=reach4';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -816,20 +816,6 @@ function updateJointHandles(){
   button.hidden=Math.abs(p.z)>1;button.style.left=(p.x+1)*stage.clientWidth/2+'px';button.style.top=(1-p.y)*stage.clientHeight/2+'px';
  }
 }
-function solveJoint(item,endpointName,target){
- const visual=item.visual,endpoint=visual.endpoints[endpointName],chain=endpointChains[endpointName];
- for(let iteration=0;iteration<12;iteration++){
-  for(const key of chain){
-   const bone=visual.joints[key],origin=bone.getWorldPosition(new T.Vector3());
-   const inv=bone.parent.getWorldQuaternion(new T.Quaternion()).invert();
-   const from=endpoint.getWorldPosition(new T.Vector3()).sub(origin).normalize().applyQuaternion(inv);
-   const to=target.clone().sub(origin).normalize().applyQuaternion(inv);
-   const delta=new T.Quaternion().setFromUnitVectors(from,to);bone.quaternion.premultiply(delta);constrainBone(visual,key);bone.updateMatrixWorld(true);
-  }
-  if(endpoint.getWorldPosition(new T.Vector3()).distanceTo(target)<.005)break;
- }
- item.boneOverrides||={};for(const key of chain)item.boneOverrides[key]=visual.joints[key].quaternion.toArray();
-}
 function initializeEditor(){
  for(const [type,label] of Object.entries(bodyTypes))$('actor-age').add(new Option(label,type));
  for(const [pose,label] of Object.entries(poseNames)){
@@ -864,7 +850,7 @@ function initializeEditor(){
    if(!jointDrag||jointDrag.name!==name||e.pointerId!==jointDrag.pointerId)return;e.stopPropagation();
    if(name==='head'){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;const a=jointDrag.headAngles;jointDrag.item.jointAxes||={};jointDrag.item.jointAxes.head=[T.MathUtils.clamp(a[0]+(e.clientY-jointDrag.startY)*.6,-50,55),T.MathUtils.clamp(a[1]+(e.clientX-jointDrag.startX)*.6,-70,70),a[2]];if(jointDrag.item.boneOverrides)delete jointDrag.item.boneOverrides.head;return;}
    const r=stage.getBoundingClientRect();raycaster.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),sceneCamera);
-   const hit=raycaster.ray.intersectPlane(jointDrag.plane,new T.Vector3());if(hit){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;solveJoint(jointDrag.item,jointDrag.name,hit);}
+   const hit=raycaster.ray.intersectPlane(jointDrag.plane,new T.Vector3());if(hit){jointDrag.item=get(jointDrag.item.id)||jointDrag.item;reachJoint(jointDrag.item,jointDrag.name,hit,endpointChains[jointDrag.name]);}
   };
   window.addEventListener('pointermove',dragMove);
   const finish=e=>{if(!jointDrag||jointDrag.name!==name||e.pointerId!==jointDrag.pointerId)return;e.stopPropagation();jointDrag=null;orbit.enabled=!cameraMode&&!routeDraft;b.classList.remove('dragging');syncPose();save();setStatus(label+'已调整，可继续拖动其他关节。');};window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',finish);
