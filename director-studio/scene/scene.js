@@ -1,3 +1,4 @@
+import {preserveJointVolume} from './skin.js';
 import { clone as cloneSkeleton } from '../../vendor/three/SkeletonUtils.js';
 import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import * as T from '../../vendor/three/three.module.js';
@@ -133,6 +134,8 @@ export function buildActor(color,bodyType='male') {
     visual.endpoints={leftHand:model.getObjectByName('L_Hand'),rightHand:model.getObjectByName('R_Hand'),leftFoot:model.getObjectByName('L_Foot'),rightFoot:model.getObjectByName('R_Foot'),leftElbow:model.getObjectByName('L_Forearm'),rightElbow:model.getObjectByName('R_Forearm'),leftKnee:model.getObjectByName('L_Calf'),rightKnee:model.getObjectByName('R_Calf'),head:model.getObjectByName('Head')};
     const world=n=>model.getObjectByName(n).getWorldPosition(new T.Vector3());
     visual.legLength=world('L_Thigh').distanceTo(world('L_Calf'))+world('L_Calf').distanceTo(world('L_Foot'));
+    visual.refreshSkin=[];
+    model.traverse(mesh=>{if(mesh.isSkinnedMesh)visual.refreshSkin.push(preserveJointVolume(mesh));});
     visual.soles=measureFeet(visual);
     visual.palms={};
     for(const side of ['L','R']){
@@ -153,6 +156,8 @@ export function buildActor(color,bodyType='male') {
     }
     visual.chestBindInverse=model.getObjectByName('Spine02').getWorldQuaternion(new T.Quaternion()).invert();
     visual.armBeforeClavicle={left:new T.Quaternion(),right:new T.Quaternion()};
+    visual.elbowBeforeTwist={left:new T.Quaternion(),right:new T.Quaternion()};
+    visual.twistBones=['L','R'].flatMap(side=>['01','02'].map(n=>model.getObjectByName(side+'_UpperarmTwist'+n))).filter(Boolean);
     visual.clavicles=['L','R'].map(side=>model.getObjectByName(side+'_Clavicle'));
 
     visual.loaded=true;return visual;
@@ -255,7 +260,7 @@ export function reachJoint(item,name,target,chain){
  // Remove the display-only clavicle correction before reading/writing local overrides.
  if(isArm && v.armBeforeClavicle?.[side]){
    v.clavicles[side==='left'?0:1].quaternion.copy(v.rest[v.clavicles[side==='left'?0:1].name]);
-   arm.quaternion.copy(v.armBeforeClavicle[side]);v.root.updateMatrixWorld(true);
+   arm.quaternion.copy(v.armBeforeClavicle[side]);elbow.quaternion.copy(v.elbowBeforeTwist[side]);v.root.updateMatrixWorld(true);
  }
  let score=cost();
  for(const step of [8,5,3,1.5]){
@@ -274,7 +279,7 @@ export function reachJoint(item,name,target,chain){
  }
  item.boneOverrides||={};
  for(const key of chain)item.boneOverrides[key]=v.joints[key].quaternion.toArray();
- if(isArm){v.armBeforeClavicle[side].copy(arm.quaternion);}
+ if(isArm){v.armBeforeClavicle[side].copy(arm.quaternion);v.elbowBeforeTwist[side].copy(elbow.quaternion);}
 }
 export function renderPose(actor,t,distance) {
  const v=actor.visual;
@@ -339,12 +344,34 @@ export function renderPose(actor,t,distance) {
    arm.quaternion.copy(clavicle.getWorldQuaternion(new T.Quaternion()).invert().multiply(world));
    arm.updateMatrixWorld(true);
  }
+ // Share axial roll along the humerus instead of corkscrewing the shoulder cap.
+ // Rotation about the arm-to-elbow axis preserves the reach of the joint chain.
+ for(const [side,prefix] of [['left','L'],['right','R']]){
+   const arm=v.joints[side+'Arm'],elbow=v.joints[side+'Elbow'];
+   v.elbowBeforeTwist[side].copy(elbow.quaternion);
+   const axis=elbow.position.clone().normalize();
+   const relative=v.rest[arm.name].clone().invert().multiply(arm.quaternion);
+   if(relative.w<0)relative.set(-relative.x,-relative.y,-relative.z,-relative.w);
+   const roll=2*Math.atan2(relative.x*axis.x+relative.y*axis.y+relative.z*axis.z,relative.w);
+   const excess=roll-T.MathUtils.clamp(roll,-.45,.45);
+   if(Math.abs(excess)<.001)continue;
+   const correction=new T.Quaternion().setFromAxisAngle(axis,-excess*.75);
+   const twist=v.model.getObjectByName(prefix+'_UpperarmTwist01');
+   const tip=v.model.getObjectByName(prefix+'_UpperarmTwist02');
+   const tipWorld=tip?.getWorldQuaternion(new T.Quaternion());
+   arm.quaternion.multiply(correction);
+   elbow.quaternion.premultiply(correction.clone().invert());
+   if(twist)twist.quaternion.premultiply(new T.Quaternion().setFromAxisAngle(axis,excess*.4));
+   if(tip)tip.quaternion.copy(tip.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(tipWorld));
+   arm.updateMatrixWorld(true);
+ }
  if(rotation[0]||rotation[2]){
    const pivot=new T.Vector3(0,v.height*scale[1]*.5,0);
    v.root.position.add(pivot.clone().sub(pivot.applyQuaternion(v.root.quaternion)));
  }
  if((distance || rotation[0] || rotation[2]) && v.soles.length){
    v.root.updateMatrixWorld(true);
+   for(const refresh of v.refreshSkin)refresh();
    const point=new T.Vector3();let low=Infinity;
    for(const {mesh,i} of v.soles)low=Math.min(low,mesh.getVertexPosition(i,point).applyMatrix4(mesh.matrixWorld).y);
    v.root.position.y+=distance?floorY-low:Math.max(0,floorY-low);

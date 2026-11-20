@@ -1,7 +1,7 @@
 import {clipsFor,routeClips,phase,routePhase,liveClip} from './timeline/sequence.js';
 import { icon, icon as assetIcon, iconButton, initializeIcons } from './ui/icons.js';
 import { sceneCollision } from './scene/collision.js?v=palm2';
-import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, reachJoint, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=reach4';
+import { T, OrbitControls, TransformControls, createProp, buildSet, buildActor, renderPose, samplePath, ages, jointRange, reachJoint, jointLabels, bodyTypes, poseNames } from './scene/scene.js?v=skin5';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage'), preview = $('preview');
@@ -136,7 +136,7 @@ function updateScene() {
       const rig=item.visual;
       if(rig.loaded){
         const posedPosition=root.position.clone(),posedRotation=root.quaternion.clone();
-        for(const bone of [...Object.values(rig.joints),...rig.clavicles,...rig.neck])if(bone)bone.quaternion.copy(rig.rest[bone.name].clone().slerp(bone.quaternion,strength));
+        for(const bone of [...Object.values(rig.joints),...rig.clavicles,...rig.neck,...rig.twistBones])if(bone)bone.quaternion.copy(rig.rest[bone.name].clone().slerp(bone.quaternion,strength));
         root.position.lerpVectors(new T.Vector3().fromArray(value.point),posedPosition,strength);
         root.quaternion.slerpQuaternions(new T.Quaternion().setFromEuler(new T.Euler(0,value.yaw,0)),posedRotation,strength);
       }
